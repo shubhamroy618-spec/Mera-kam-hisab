@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#edf5ef">
+<title>मेरा काम हिसाब V6</title>
+<style>
+:root{--bg:#f5f8f5;--card:#ffffff;--ink:#26332b;--muted:#6c7a70;--line:#e1eae2;--accent:#527a60;--green:#39734d;--red:#a94a45;--blue:#496f7c;--purple:#71836f;--orange:#9a7950}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif}
+header{background:#e8f1e9;padding:17px 16px 13px;border-bottom:1px solid #d9e5da;position:sticky;top:0;z-index:5}
+h1{font-size:21px;margin:0}header p{margin:4px 0 0;color:var(--muted);font-size:13px}
+main{max-width:760px;margin:auto;padding:14px 13px 90px}
+nav{display:flex;gap:7px;overflow:auto;padding:10px 12px;background:#fbfdfb;border-bottom:1px solid var(--line);position:sticky;top:67px;z-index:4}
+nav button{white-space:nowrap;border:0;border-radius:20px;padding:9px 13px;background:#edf3ed;color:#3f5d48;font-weight:650}
+nav button.active{background:#527a60;color:white}
+h2{font-size:18px;margin:8px 0 12px}h3{font-size:15px;margin:0 0 8px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:14px;box-shadow:0 2px 8px #344b7708}.grid>.card:nth-child(4n+1){background:#edf5ee;border-color:#dce9dd}.grid>.card:nth-child(4n+2){background:#f1f6f2;border-color:#e0eae1}.grid>.card:nth-child(4n+3){background:#f5f7f1;border-color:#e7ebdf}.grid>.card:nth-child(4n){background:#eef4f2;border-color:#dfe9e5}
+.click{cursor:pointer;text-align:left;width:100%;color:inherit;font:inherit}
+.click:active{transform:scale(.99)}.metric{font-size:23px;font-weight:800;margin:5px 0}.small{font-size:12px;color:var(--muted)}
+.icon{font-size:22px}.row{display:flex;justify-content:space-between;align-items:center;gap:8px}.stack{display:grid;gap:10px}
+.btn{border:0;border-radius:10px;padding:11px 14px;background:#527a60;color:white;font-weight:700;cursor:pointer}
+.btn.secondary{background:#eaf1eb;color:#3f6449}.btn.danger{background:#faeeee;color:var(--red)}
+input,select,textarea{width:100%;padding:11px;border:1px solid #d6e0d7;border-radius:9px;font:inherit;background:white;color:#26332b}
+label{font-size:13px;font-weight:650;display:block;margin:8px 0 5px}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.item{padding:12px 0;border-bottom:1px solid var(--line)}.item:last-child{border:0}
+.pill{font-size:11px;padding:4px 8px;border-radius:20px;background:#eaf1eb;color:#3f6449}
+.green{color:var(--green)}.red{color:var(--red)}.muted{color:var(--muted)}
+.hidden{display:none!important}.detail{margin-top:12px}.empty{text-align:center;color:var(--muted);padding:25px 10px}
+.modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.sheet{background:white;width:min(760px,100%);max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:18px}
+.close{float:right;border:0;background:#edf1ed;border-radius:50%;width:32px;height:32px;font-size:18px}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:9px 5px;border-bottom:1px solid var(--line)}th{color:var(--muted)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+@media(min-width:600px){.modal{align-items:center;padding:20px}.sheet{border-radius:18px}.grid{gap:14px}}
+</style></head>
+<body>
+<header><h1>मेरा काम हिसाब</h1><p>रजाई के पीस, लेडीज़ और सेंटर का पूरा हिसाब</p></header>
+<nav id="nav">
+<button data-page="home" class="active">होम</button><button data-page="lots">लॉट</button><button data-page="ladies">लेडीज़</button><button data-page="center">सेंटर</button><button data-page="reports">रिपोर्ट</button><button data-page="backup">बैकअप</button>
+</nav>
+<main id="app"></main>
+<div id="modal" class="modal hidden"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="modalBody"></div></div></div>
+<script>
+const KEY='mkha_v3';
+let db=JSON.parse(localStorage.getItem(KEY)||'null')||{lots:[],ladies:[],alloc:[],returns:[],ladyTx:[],deposits:[],centerTx:[],openingCenter:0};
+['lots','ladies','alloc','returns','ladyTx','deposits','centerTx'].forEach(k=>(db[k]||[]).forEach(x=>{if(!x.id)x.id=crypto.randomUUID()}));
+const save=()=>localStorage.setItem(KEY,JSON.stringify(db));
+const money=n=>'₹'+(Number(n)||0).toLocaleString('en-IN',{maximumFractionDigits:2});
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sum=a=>a.reduce((x,y)=>x+(Number(y)||0),0);
+function lotName(id){return db.lots.find(x=>x.id===id)?.name||'लॉट'}
+function ladyName(id){return db.ladies.find(x=>x.id===id)?.name||'लेडी'}
+function newestFirst(arr,key='date'){return arr.map((item,index)=>({item,index})).sort((a,b)=>String(b.item[key]||'').localeCompare(String(a.item[key]||''))||b.index-a.index).map(x=>x.item)}
+function assigned(lid,aid){return sum(db.alloc.filter(x=>x.lot===lid&&(!aid||x.lady===aid)).map(x=>x.qty))}
+function returned(lid,aid){return sum(db.returns.filter(x=>x.lot===lid&&(!aid||x.lady===aid)).map(x=>x.qty))}
+function wageEarned(aid){return sum(db.returns.filter(x=>x.lady===aid).map(r=>r.qty*(Number(db.alloc.find(a=>a.lot===r.lot&&a.lady===aid)?.rate)||0)))}
+function ladyPayments(aid){return sum(db.ladyTx.filter(x=>x.lady===aid&&x.type==='payment').map(x=>x.amount))}
+function ladyAdvance(aid){return sum(db.ladyTx.filter(x=>x.lady===aid&&x.type==='advance').map(x=>x.amount))-sum(db.ladyTx.filter(x=>x.lady===aid&&x.type==='advance_return').map(x=>x.amount))-ladyAdvanceCuts(aid)}
+function ladyExtra(aid){return sum(db.ladyTx.filter(x=>x.lady===aid&&x.type==='extra').map(x=>x.amount))-sum(db.ladyTx.filter(x=>x.lady===aid&&x.type==='extra_return').map(x=>x.amount))}
+function ladyAdvanceCuts(aid){return sum(db.ladyTx.filter(x=>x.lady===aid&&x.type==='advance_cut').map(x=>x.amount))}
+function ladyExtraGross(aid){return sum(db.ladyTx.filter(x=>x.lady===aid&&x.type==='extra').map(x=>x.amount))}
+function ladyExtraReturns(aid){return sum(db.ladyTx.filter(x=>x.lady===aid&&x.type==='extra_return').map(x=>x.amount))}
+function wageBalance(aid){return wageEarned(aid)-ladyPayments(aid)-ladyAdvanceCuts(aid)-ladyExtra(aid)}
+function centerWork(){return sum(db.deposits.map(x=>x.qty*Number(x.rate)))}
+function centerReceived(){return sum(db.centerTx.map(x=>x.amount))}
+function centerBalance(){return Number(db.openingCenter||0)+centerWork()-centerReceived()}
+function centerPieces(){return sum(db.lots.map(x=>x.qty))}
+function centerDeposited(){return sum(db.deposits.map(x=>x.qty))}
+function fmtDate(d){return d||'—'}
+function page(p){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));({home:home,lots:lotsPage,ladies:ladiesPage,center:centerPage,reports:reportsPage,backup:backupPage}[p]||home)();window.currentPage=p}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>page(b.dataset.page));
+function card(title,value,sub,fn,emoji='') {return `<button class="card click" onclick="${fn}"><div class="row"><span class="small">${title}</span><span class="icon">${emoji}</span></div><div class="metric">${value}</div><div class="small">${sub}</div></button>`}
+function home(){
+let outstanding=centerBalance();
+document.getElementById('app').innerHTML=`<h2>होम पेज</h2><div class="grid">
+${card('लॉट का हाल',db.lots.length+' लॉट','लॉट और बचे हुए पीस देखें',"page('lots')",'📦')}
+${card('लेडीज़ का हिसाब',db.ladies.length+' लेडीज़','मजदूरी, एडवांस और भुगतान',"page('ladies')",'👩')}
+${card('सेंटर का हिसाब',money(outstanding),'सेंटर का कुल बाकी हिसाब',"page('center')",'🏢')}
+${card('रिपोर्ट',money(sum(db.ladies.map(x=>wageBalance(x.id)))),'लेडीज़ की बाकी मजदूरी',"page('reports')",'📊')}
+</div><h2 style="margin-top:20px">आज का सार</h2><div class="grid">
+${card('कुल लॉट पीस',centerPieces(),'सभी लॉट में आए पीस',"showDetail('homePieces')",'🧺')}
+${card('लेडीज़ को दिए',sum(db.alloc.map(x=>x.qty)),'कुल बाँटे गए पीस',"showDetail('assigned')",'🤝')}
+${card('लेडीज़ से जमा',sum(db.returns.map(x=>x.qty)),'कुल वापस मिले पीस',"showDetail('returned')",'✅')}
+${card('सेंटर में जमा',centerDeposited(),'सेंटर को दिए गए पीस',"page('center')",'📥')}
+</div><p class="small" style="margin-top:15px">ऊपर के हर बॉक्स पर क्लिक करके उसका पूरा हिसाब देख सकते हैं।</p>`;
+}
+function lotsPage(){
+let html=`<div class="row"><h2>लॉट का हिसाब</h2><button class="btn" onclick="lotForm()">+ नया लॉट</button></div>`;
+if(!db.lots.length)html+=`<div class="card empty">अभी कोई लॉट नहीं जोड़ा गया।</div>`;
+newestFirst(db.lots).forEach(l=>{let a=assigned(l.id),r=returned(l.id),remaining=Number(l.qty)-a;
+html+=`<button class="card click" style="display:block;width:100%;margin-bottom:10px" onclick="lotDetail('${l.id}')"><div class="row"><b>${esc(l.name)}</b><span class="pill">${fmtDate(l.date)}</span></div><div class="grid" style="margin-top:9px"><div><div class="small">कुल पीस</div><b>${l.qty}</b></div><div><div class="small">लेडीज़ को दिए</div><b>${a}</b></div><div><div class="small">लौटकर जमा</div><b>${r}</b></div><div><div class="small">लॉट में बाकी</div><b>${remaining}</b></div></div></button>`});
+document.getElementById('app').innerHTML=html;
+}
+function lotForm(){
+openModal(`<h2>नया लॉट जोड़ें</h2><form onsubmit="addLot(event)"><label>तारीख</label><input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"><label>पीस / रजाई का नाम</label><input name="name" required placeholder="जैसे 12 नंबर रजाई"><div class="formgrid"><div><label>कुल पीस</label><input name="qty" type="number" min="1" required></div><div><label>सेंटर रेट प्रति पीस (₹)</label><input name="rate" type="number" min="0" step=".01" required></div></div><button class="btn" style="margin-top:14px">लॉट सेव करें</button></form>`);
+}
+function addLot(e){e.preventDefault();let f=new FormData(e.target);db.lots.push({id:crypto.randomUUID(),date:f.get('date'),name:f.get('name'),qty:+f.get('qty'),rate:+f.get('rate')});save();closeModal();lotsPage()}
+function lotDetail(id){
+let l=db.lots.find(x=>x.id===id);let allocs=newestFirst(db.alloc.filter(x=>x.lot===id));
+let body=`<h2>${esc(l.name)} — लॉट विवरण</h2><div class="actions"><button class="btn secondary" onclick="editRecord('lots','${l.id}')">✏️ लॉट सुधारें</button><button class="btn danger" onclick="deleteRecord('lots','${l.id}')">🗑️ लॉट हटाएँ</button></div><div class="grid"><div class="card"><span class="small">कुल पीस</span><div class="metric">${l.qty}</div></div><div class="card"><span class="small">अभी बाँटने बाकी</span><div class="metric">${l.qty-assigned(id)}</div></div><div class="card"><span class="small">लेडीज़ से जमा</span><div class="metric">${returned(id)}</div></div><div class="card"><span class="small">सेंटर रेट</span><div class="metric">${money(l.rate)}</div></div></div><div class="actions"><button class="btn" onclick="assignForm('${id}')">+ लेडी को पीस दें</button><button class="btn secondary" onclick="centerDepositForm('${id}')">+ सेंटर में जमा करें</button></div><h3 style="margin-top:16px">लेडीज़ का काम</h3>`;
+allocs.forEach(a=>{let r=returned(id,a.lady);body+=`<div class="item"><div class="row"><b>${esc(ladyName(a.lady))}</b><span>${r}/${a.qty} जमा</span></div><div class="small">मजदूरी रेट ${money(a.rate)} प्रति पीस · बाकी ${a.qty-r}</div><button class="btn secondary" style="margin-top:8px" onclick="returnForm('${id}','${a.lady}')">जमा पीस दर्ज करें</button><button class="btn secondary" onclick="editRecord('alloc','${a.id}')">सुधारें</button><button class="btn danger" onclick="deleteRecord('alloc','${a.id}')">हटाएँ</button></div>`});
+if(!allocs.length)body+=`<p class="small">अभी किसी लेडी को पीस नहीं दिए गए।</p>`;
+openModal(body);
+}
+function assignForm(lid){
+let opts=db.ladies.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
+openModal(`<h2>लेडी को पीस दें</h2><form onsubmit="addAssign(event,'${lid}')"><label>लेडी का नाम</label><select name="lady" required>${opts}</select><div class="formgrid"><div><label>पीस</label><input name="qty" type="number" min="1" required></div><div><label>मजदूरी रेट ₹ प्रति पीस</label><input name="rate" type="number" min="0" step=".01" required></div></div><button class="btn" style="margin-top:14px">सेव करें</button></form>`);
+}
+function addAssign(e,lid){e.preventDefault();let f=new FormData(e.target),qty=+f.get('qty');if(assigned(lid)+qty>db.lots.find(x=>x.id===lid).qty)return alert('लॉट में इतने पीस बाकी नहीं हैं।');db.alloc.push({id:crypto.randomUUID(),lot:lid,lady:f.get('lady'),qty,rate:+f.get('rate')});save();lotDetail(lid)}
+function returnForm(lid,lady){
+openModal(`<h2>जमा / वापसी पीस</h2><form onsubmit="addReturn(event,'${lid}','${lady}')"><label>तारीख</label><input name="date" type="date" value="${new Date().toISOString().slice(0,10)}" required><label>आज जमा किए पीस</label><input name="qty" type="number" min="1" required><button class="btn" style="margin-top:14px">जमा सेव करें</button></form>`);
+}
+function addReturn(e,lid,lady){e.preventDefault();let f=new FormData(e.target),qty=+f.get('qty'),a=db.alloc.find(x=>x.lot===lid&&x.lady===lady);if(returned(lid,lady)+qty>a.qty)return alert('जमा पीस दिए गए पीस से ज्यादा नहीं हो सकते।');db.returns.push({id:crypto.randomUUID(),lot:lid,lady,date:f.get('date'),qty});save();lotDetail(lid)}
+function ladiesPage(){
+let html=`<div class="row"><h2>लेडीज़ का हिसाब</h2><button class="btn" onclick="ladyForm()">+ नई लेडी</button></div>`;
+if(!db.ladies.length)html+=`<div class="card empty">पहले लेडी का नाम जोड़ें।</div>`;
+newestFirst(db.ladies).forEach(l=>html+=`<button class="card click" style="display:block;width:100%;margin-bottom:10px" onclick="ladyDetail('${l.id}')"><div class="row"><b>${esc(l.name)}</b><span class="pill">पूरा खाता देखें</span></div><div class="grid" style="margin-top:8px"><div><span class="small">कुल मजदूरी बाकी</span><div><b>${money(wageBalance(l.id))}</b></div></div><div><span class="small">पिछला एडवांस बाकी</span><div><b>${money(ladyAdvance(l.id))}</b></div></div><div><span class="small">एडवांस काटने के बाद</span><div><b>${money(Math.max(0,wageBalance(l.id)-ladyAdvance(l.id)))}</b></div></div></div></button>`);
+document.getElementById('app').innerHTML=html;
+}
+function ladyForm(){openModal(`<h2>नई लेडी जोड़ें</h2><form onsubmit="addLady(event)"><label>नाम</label><input name="name" required><button class="btn" style="margin-top:14px">सेव करें</button></form>`)}
+function addLady(e){e.preventDefault();db.ladies.push({id:crypto.randomUUID(),name:new FormData(e.target).get('name')});save();closeModal();ladiesPage()}
+function ladyDetail(id){
+let l=db.ladies.find(x=>x.id===id),adv=ladyAdvance(id),earn=wageEarned(id),paid=ladyPayments(id),extra=ladyExtra(id),cuts=ladyAdvanceCuts(id),net=wageBalance(id);
+let afterAdvance=Math.max(0,net-adv);
+let body=`<h2>${esc(l.name)} का पूरा खाता</h2><div class="actions"><button class="btn secondary" onclick="editRecord('ladies','${id}')">नाम सुधारें</button><button class="btn danger" onclick="deleteRecord('ladies','${id}')">लेडी हटाएँ</button></div><div class="grid">
+<div class="card"><span class="small">कुल मजदूरी</span><div class="metric">${money(net)}</div><span class="small">पहले दिए पेमेंट घटाकर बची मजदूरी</span></div>
+<div class="card"><span class="small">पिछला एडवांस बाकी</span><div class="metric">${money(adv)}</div><span class="small">न काटें तो अगले पेमेंट में भी रहेगा</span></div>
+<div class="card"><span class="small">एडवांस काटने के बाद बाकी</span><div class="metric green">${money(afterAdvance)}</div><span class="small">पूरा एडवांस काटने पर देने योग्य रकम</span></div>
+</div>
+<div class="actions" style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn secondary" onclick="ladyTxForm('${id}','advance')">एडवांस</button><button class="btn" onclick="ladyTxForm('${id}','payment',true)">पूरा क्लियर</button></div><h3 style="margin-top:16px">नया / बाकी पीस</h3>`;
+// Show the not-yet-cleared returned pieces first. A clear-payment snapshot moves only the covered quantity into its own historical group.
+let allocs=db.alloc.filter(a=>a.lady===id);
+let covered={};
+(db.ladyTx||[]).filter(x=>x.lady===id&&x.type==='payment'&&Array.isArray(x.covers)).forEach(x=>x.covers.forEach(c=>covered[c.alloc]=(covered[c.alloc]||0)+Number(c.qty||0)));
+newestFirst(allocs.map(a=>({...a,_date:db.lots.find(z=>z.id===a.lot)?.date||''})),'_date').forEach(a=>{let r=sum(db.returns.filter(x=>x.lot===a.lot&&x.lady===id).map(x=>x.qty));let left=Math.max(0,r-(covered[a.id]||0));if(left>0)body+=`<div class="item"><b>${esc(lotName(a.lot))}</b><div class="small">नए / बाकी जमा पीस ${left} · दिए ${a.qty} · कुल जमा ${r} · रेट ${money(a.rate)} · मजदूरी ${money(left*a.rate)}</div></div>`});
+body+=`<h3 style="margin-top:16px">पुराने क्लियर किए हुए पीस</h3>`;
+let pays=newestFirst(db.ladyTx.filter(x=>x.lady===id&&x.type==='payment'&&Array.isArray(x.covers)));
+pays.forEach(x=>{body+=`<div class="item" style="border:1px solid #269653"><div class="row"><b>पेमेंट पूरा — ${fmtDate(x.date)}</b><b>${money(x.amount)}</b></div><div class="small">यह पेमेंट नीचे दिए पुराने पीस के लिए दर्ज है। ${x.note?'· '+esc(x.note):''}</div>`;x.covers.forEach(c=>{let a=allocs.find(z=>z.id===c.alloc);body+=`<div class="small" style="margin-top:6px">${esc(a?lotName(a.lot):'पुराना पीस')} — ${c.qty} पीस × ${money(c.rate)} = ${money(c.amount)}</div>`});body+=`<div class="actions"><button class="btn secondary" onclick="editRecord('ladyTx','${x.id}')">सुधारें</button><button class="btn danger" onclick="deleteRecord('ladyTx','${x.id}')">हटाएँ</button></div></div>`});
+let legacy=pays.length?db.ladyTx.filter(x=>x.lady===id&&x.type==='payment'&&!Array.isArray(x.covers)):db.ladyTx.filter(x=>x.lady===id&&x.type==='payment');
+if(legacy.length){body+=`<h3>पहले के पेमेंट रिकॉर्ड</h3>`;newestFirst(legacy).forEach(x=>body+=`<div class="item"><div class="row"><b>मजदूरी पेमेंट</b><b>${money(x.amount)}</b></div><div class="small">${fmtDate(x.date)} ${x.note?'· '+esc(x.note):''}</div><div class="actions"><button class="btn secondary" onclick="editRecord('ladyTx','${x.id}')">सुधारें</button><button class="btn danger" onclick="deleteRecord('ladyTx','${x.id}')">हटाएँ</button></div></div>`)}
+if(!db.ladyTx.some(x=>x.lady===id&&x.type==='payment'))body+=`<p class="small">अभी कोई पेमेंट रिकॉर्ड नहीं।</p>`;
+openModal(body);
+}
+function ladyTxForm(id,type,clearAll=false){
+let title={payment:clearAll?'पूरा हिसाब क्लियर करें':'मजदूरी पेमेंट दर्ज करें',advance:'एडवांस दें',advance_return:'एडवांस वापस मिला',extra:'अतिरिक्त पैसा दर्ज करें',extra_return:'अतिरिक्त पैसा वापस मिला'}[type];
+let due=Math.max(0,wageBalance(id)),adv=Math.max(0,ladyAdvance(id)),payDefault=clearAll?Math.max(0,due-adv):'';
+let extraFields=type==='payment'?`<label>आज मजदूरी से एडवांस कितना काटना है ₹</label><input name="cut" type="number" min="0" step=".01" value="${clearAll?adv:0}"><p class="small">बाकी एडवांस अगले महीने के लिए रहेगा। पूरा हिसाब क्लियर करने पर ${money(adv)} एडवांस काटा जाएगा।</p>`:'';
+openModal(`<h2>${title}</h2>${type==='payment'?`<div class="card" style="margin:8px 0;background:#edf5ee"><div class="grid"><div><div class="small">कुल मजदूरी बाकी</div><b class="metric">${money(due)}</b></div><div><div class="small">पिछला एडवांस</div><b class="metric">${money(adv)}</b></div><div><div class="small">पूरा एडवांस काटने पर बाकी</div><b class="metric green">${money(Math.max(0,due-adv))}</b></div></div><div class="small">एडवांस काटना जरूरी नहीं है। जितना काटेंगे, उतना ही एडवांस कम होगा; बाकी अगले पेमेंट में दिखेगा।</div></div>`:''}<form onsubmit="addLadyTx(event,'${id}','${type}')"><input type="hidden" name="clearAll" value="${clearAll?'1':'0'}"><label>तारीख</label><input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"><label>रकम ₹</label><input name="amount" type="number" min="0.01" step=".01" required value="${payDefault}">${extraFields}<label>नोट (वैकल्पिक)</label><input name="note"><button class="btn" style="margin-top:14px">सेव करें</button></form>`);
+}
+function addLadyTx(e,id,type){e.preventDefault();let f=new FormData(e.target),date=f.get('date'),amount=+f.get('amount');if(type==='payment'){let cut=+(f.get('cut')||0);if(cut>ladyAdvance(id))return alert('एडवांस कटौती बाकी एडवांस से ज्यादा नहीं हो सकती।');if(cut>0)db.ladyTx.push({lady:id,type:'advance_cut',date,amount:cut,note:'मजदूरी से एडवांस कटौती'});}if(type==='advance_return'&&amount>ladyAdvance(id))return alert('वापस मिली रकम बाकी एडवांस से ज्यादा नहीं हो सकती।');if(type==='extra_return'&&amount>ladyExtra(id))return alert('वापस मिली रकम अतिरिक्त बकाया से ज्यादा नहीं हो सकती।');let tx={id:crypto.randomUUID(),lady:id,type,date,amount,note:f.get('note')};if(type==='payment'&&f.get('clearAll')==='1'){tx.covers=db.alloc.filter(a=>a.lady===id).map(a=>{let qty=sum(db.returns.filter(r=>r.lot===a.lot&&r.lady===id).map(r=>r.qty));let already=sum(db.ladyTx.filter(t=>t.lady===id&&t.type==='payment'&&Array.isArray(t.covers)).flatMap(t=>t.covers).filter(c=>c.alloc===a.id).map(c=>c.qty));qty=Math.max(0,qty-already);return {alloc:a.id,qty,rate:Number(a.rate)||0,amount:qty*(Number(a.rate)||0)}}).filter(c=>c.qty>0);}db.ladyTx.push(tx);save();ladyDetail(id)}
+function centerPage(){
+let total=centerPieces(),dep=centerDeposited(),due=centerBalance();
+document.getElementById('app').innerHTML=`<div class="row"><h2>सेंटर का हिसाब</h2><button class="btn" onclick="centerTxForm()">+ पेमेंट मिला</button></div>
+<div class="grid">
+${card('कुल पीस आए',total+' पीस','सभी लॉट में सेंटर से आए',"showDetail('centerIn')",'📦')}
+${card('सेंटर में जमा',dep+' पीस','कुल जमा किए गए पीस',"showDetail('centerDeposits')",'📥')}
+${card('जमा करना बाकी',Math.max(0,total-dep)+' पीस','अभी सेंटर में देने बाकी',"showDetail('centerPending')",'⏳')}
+${card('कुल पेमेंट बनना',money(centerWork()+Number(db.openingCenter||0)),'पिछला बकाया + जमा काम',"showDetail('centerDue')",'🧾')}
+${card('पेमेंट मिला',money(centerReceived()),'अब तक सेंटर से मिला',"showDetail('centerPayments')",'💵')}
+${card('अब कुल बाकी',money(due),'पिछला बकाया और नया काम जोड़कर',"showDetail('centerBalance')",'📌')}
+</div><div class="card" style="margin-top:13px"><div class="row"><b>पिछला बकाया</b><b>${money(db.openingCenter)}</b></div><div class="small">यह पुराना बकाया नए काम के साथ कुल बाकी में जुड़ता है।</div><button class="btn secondary" style="margin-top:9px" onclick="openingForm()">पिछला बकाया बदलें</button></div>
+<h3 style="margin-top:17px">हर लॉट का सेंटर हिसाब</h3><div class="stack">${newestFirst(db.lots).map(l=>{let d=sum(db.deposits.filter(x=>x.lot===l.id).map(x=>x.qty)),amt=sum(db.deposits.filter(x=>x.lot===l.id).map(x=>x.qty*x.rate));return `<button class="card click" onclick="showDetail('lotCenter','${l.id}')"><div class="row"><b>${esc(l.name)}</b><span class="pill">${fmtDate(l.date)}</span></div><div class="grid" style="margin-top:8px"><div><span class="small">आए</span><b>${l.qty}</b></div><div><span class="small">जमा</span><b>${d}</b></div><div><span class="small">बाकी</span><b>${l.qty-d}</b></div><div><span class="small">बना पैसा</span><b>${money(amt)}</b></div></div></button>`}).join('')||'<div class="card empty">अभी कोई लॉट नहीं है।</div>'}</div>
+<div class="actions"><button class="btn" onclick="centerDepositForm()">+ सेंटर में पीस जमा करें</button></div>`;
+}
+function centerDepositForm(lid){
+let opts=db.lots.map(l=>`<option value="${l.id}" ${lid===l.id?'selected':''}>${esc(l.name)} (${l.qty} पीस)</option>`).join('');
+openModal(`<h2>सेंटर में पीस जमा करें</h2><form onsubmit="addDeposit(event)"><label>तारीख</label><input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"><label>लॉट / पीस का नाम</label><select name="lot" required>${opts}</select><div class="formgrid"><div><label>जमा पीस</label><input name="qty" type="number" min="1" required></div><div><label>सेंटर रेट ₹ प्रति पीस</label><input name="rate" type="number" min="0" step=".01" required></div></div><label>नोट</label><input name="note"><button class="btn" style="margin-top:14px">जमा सेव करें</button></form>`);
+}
+function addDeposit(e){e.preventDefault();let f=new FormData(e.target),lot=f.get('lot'),qty=+f.get('qty'),available=returned(lot)-sum(db.deposits.filter(x=>x.lot===lot).map(x=>x.qty));if(qty>available)return alert('लेडीज़ से जितने पीस जमा मिले हैं, उससे ज्यादा सेंटर में जमा नहीं कर सकते।');db.deposits.push({id:crypto.randomUUID(),date:f.get('date'),lot,qty,rate:+f.get('rate'),note:f.get('note')});save();centerPage();closeModal()}
+function centerTxForm(){openModal(`<h2>सेंटर से पेमेंट मिला</h2><form onsubmit="addCenterTx(event)"><label>तारीख</label><input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"><label>मिली हुई रकम ₹</label><input name="amount" type="number" min=".01" step=".01" required><label>नोट</label><input name="note" placeholder="किस काम का पेमेंट"><button class="btn" style="margin-top:14px">पेमेंट सेव करें</button></form></div>`)}
+function addCenterTx(e){e.preventDefault();let f=new FormData(e.target);db.centerTx.push({id:crypto.randomUUID(),date:f.get('date'),amount:+f.get('amount'),note:f.get('note')});save();centerPage();closeModal()}
+function openingForm(){openModal(`<h2>पिछला बकाया दर्ज करें</h2><form onsubmit="setOpening(event)"><label>पहले से बाकी रकम ₹</label><input name="amount" type="number" step=".01" required value="${db.openingCenter||0}"><button class="btn" style="margin-top:14px">सेव करें</button></form>`)}
+function setOpening(e){e.preventDefault();db.openingCenter=+new FormData(e.target).get('amount');save();centerPage();closeModal()}
+function showDetail(type,id){
+let title='',body='';
+const list=(arr,render)=>arr.length?newestFirst(arr).map(render).join(''):'<p class="empty">अभी कोई रिकॉर्ड नहीं।</p>';
+if(type==='centerIn'||type==='homePieces'){title='सेंटर से आए कुल पीस';body=list(db.lots,l=>`<div class="item"><b>${esc(l.name)}</b><div class="small">${l.date} · आए ${l.qty} पीस · रेट ${money(l.rate)}</div></div>`)}
+if(type==='assigned'){title='लेडीज़ को दिए गए पीस';body=list(db.alloc,a=>`<div class="item"><b>${esc(ladyName(a.lady))} — ${esc(lotName(a.lot))}</b><div class="small">${a.qty} पीस · रेट ${money(a.rate)}</div></div>`)}
+if(type==='returned'){title='लेडीज़ से जमा हुए पीस';body=list(db.returns,r=>`<div class="item"><b>${esc(ladyName(r.lady))} — ${esc(lotName(r.lot))}</b><div class="small">${r.date} · ${r.qty} पीस</div><div class="actions"><button class="btn secondary" onclick="editRecord('returns','${r.id}')">सुधारें</button><button class="btn danger" onclick="deleteRecord('returns','${r.id}')">हटाएँ</button></div></div>`)}
+if(type==='centerDeposits'){title='सेंटर में जमा पीस';body=list(db.deposits,d=>`<div class="item"><b>${esc(lotName(d.lot))}</b><div class="small">${d.date} · ${d.qty} पीस × ${money(d.rate)} = ${money(d.qty*d.rate)}</div><div class="actions"><button class="btn secondary" onclick="editRecord('deposits','${d.id}')">सुधारें</button><button class="btn danger" onclick="deleteRecord('deposits','${d.id}')">हटाएँ</button></div></div>`)}
+if(type==='centerPending'){title='सेंटर में जमा करना बाकी';body=list(db.lots,l=>{let d=sum(db.deposits.filter(x=>x.lot===l.id).map(x=>x.qty));return `<div class="item"><b>${esc(l.name)}</b><div class="small">आए ${l.qty} · जमा ${d} · बाकी ${l.qty-d} पीस</div></div>`})}
+if(type==='centerDue'){title='कुल सेंटर पेमेंट बनना';body=`<p>पिछला बकाया: <b>${money(db.openingCenter)}</b></p>`+list(db.deposits,d=>`<div class="item"><b>${esc(lotName(d.lot))}</b><div class="small">${d.date} · ${d.qty} × ${money(d.rate)} = ${money(d.qty*d.rate)}</div></div>`)}
+if(type==='centerPayments'){title='सेंटर से मिले पेमेंट';body=list(db.centerTx,t=>`<div class="item"><b>${money(t.amount)}</b><div class="small">${t.date} ${esc(t.note||'')}</div><div class="actions"><button class="btn secondary" onclick="editRecord('centerTx','${t.id}')">सुधारें</button><button class="btn danger" onclick="deleteRecord('centerTx','${t.id}')">हटाएँ</button></div></div>`)}
+if(type==='centerBalance'){title='सेंटर का बाकी हिसाब';body=`<div class="item">पिछला बकाया <b>${money(db.openingCenter)}</b></div><div class="item">उसके बाद जमा काम <b>${money(centerWork())}</b></div><div class="item">कुल लेना है <b>${money(db.openingCenter+centerWork())}</b></div><div class="item">पेमेंट मिला <b>${money(centerReceived())}</b></div><div class="item">अब बाकी <b class="red">${money(centerBalance())}</b></div>`}
+if(type==='lotCenter'){let l=db.lots.find(x=>x.id===id),ds=newestFirst(db.deposits.filter(x=>x.lot===id));title=esc(l.name)+' — सेंटर खाता';body=`<div class="item">कुल आए <b>${l.qty} पीस</b></div><div class="item">जमा किए <b>${sum(ds.map(x=>x.qty))} पीस</b></div><div class="item">बाकी जमा <b>${l.qty-sum(ds.map(x=>x.qty))} पीस</b></div>`+list(ds,d=>`<div class="item"><b>${d.date}</b><div class="small">${d.qty} पीस × ${money(d.rate)} = <b>${money(d.qty*d.rate)}</b></div><div class="actions"><button class="btn secondary" onclick="adjustDeposit('${d.id}',-1)">− 1 पीस</button><button class="btn secondary" onclick="adjustDeposit('${d.id}',1)">+ 1 पीस</button><button class="btn secondary" onclick="editRecord('deposits','${d.id}')">सुधारें</button><button class="btn danger" onclick="deleteRecord('deposits','${d.id}')">हटाएँ</button></div></div>`)}
+openModal(`<h2>${title}</h2>${body}`);
+}
+
+function adjustDeposit(id,delta){
+ const d=db.deposits.find(x=>x.id===id);if(!d)return;
+ if(delta<0&&d.qty<=1)return alert('जमा पीस 0 से कम नहीं हो सकते। पूरी एंट्री हटानी हो तो हटाएँ दबाएँ।');
+ if(delta>0){const available=returned(d.lot)-sum(db.deposits.filter(x=>x.lot===d.lot).map(x=>x.qty));if(available<1)return alert('लेडीज़ से जमा मिले पीस से ज्यादा सेंटर में जमा नहीं कर सकते।');}
+ d.qty+=delta;save();showDetail('lotCenter',d.lot);
+}
+
+function reportsPage(){let due=sum(db.ladies.map(l=>wageBalance(l.id))),adv=sum(db.ladies.map(l=>ladyAdvance(l.id)));document.getElementById('app').innerHTML=`<h2>रिपोर्ट</h2><div class="grid">${card('लेडीज़ की मजदूरी बाकी',money(due),'जमा किए काम की बाकी मजदूरी',"showDetail('assigned')")}${card('लेडीज़ से एडवांस लेना',money(adv),'अभी वापस नहीं मिला',"page('ladies')")}${card('सेंटर से लेना',money(centerBalance()),'पिछला बकाया + नया काम − पेमेंट',"page('center')")}${card('कुल पीस बाकी जमा',Math.max(0,centerPieces()-centerDeposited())+' पीस','सेंटर में जमा करने बाकी',"showDetail('centerPending')")}</div>`}
+function editRecord(type,id){
+ const arr=db[type],rec=arr?.find(x=>x.id===id);if(!rec)return alert('यह रिकॉर्ड नहीं मिला।');
+ const labels={date:'तारीख',name:'नाम / पीस का नाम',qty:'पीस',rate:'रेट ₹',amount:'रकम ₹',note:'नोट',lady:'लेडी',lot:'लॉट',type:'एंट्री प्रकार'};
+ const fields=Object.keys(rec).filter(k=>k!=='id');
+ let html=`<h2>एंट्री सुधारें</h2><form onsubmit="saveRecordEdit(event,'${type}','${id}')">`;
+ fields.forEach(k=>{let v=rec[k]??'';html+=`<label>${labels[k]||k}</label>`;
+ if(k==='lady')html+=`<select name="${k}">${db.ladies.map(x=>`<option value="${x.id}" ${x.id===v?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`;
+ else if(k==='lot')html+=`<select name="${k}">${db.lots.map(x=>`<option value="${x.id}" ${x.id===v?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`;
+ else if(k==='type')html+=`<input name="${k}" value="${esc(v)}" readonly>`;
+ else html+=`<input name="${k}" ${k==='date'?'type="date"':(['qty','rate','amount'].includes(k)?'type="number" step=".01"':'type="text"')} value="${esc(v)}" ${['qty','rate','amount'].includes(k)?'required':''}>`;
+ });html+=`<button class="btn" style="margin-top:14px">बदलाव सेव करें</button></form>`;openModal(html);
+}
+function saveRecordEdit(e,type,id){e.preventDefault();let rec=db[type].find(x=>x.id===id);if(!rec)return;let f=new FormData(e.target),candidate={...rec};Object.keys(rec).filter(k=>k!=='id').forEach(k=>{let v=f.get(k);if(v!==null)candidate[k]=['qty','rate','amount'].includes(k)?Number(v):v});
+ if(type==='lots'&&(+candidate.qty)<assigned(id))return alert('कुल पीस, पहले से लेडीज़ को दिए पीस से कम नहीं हो सकते।');
+ if(type==='alloc'&&(+candidate.qty)<returned(candidate.lot,candidate.lady))return alert('दिए गए पीस, जमा पीस से कम नहीं हो सकते।');
+ if(type==='returns'&&(+candidate.qty)+sum(db.returns.filter(x=>x.lot===candidate.lot&&x.lady===candidate.lady&&x.id!==id).map(x=>x.qty))>assigned(candidate.lot,candidate.lady))return alert('जमा पीस, दिए गए पीस से ज्यादा नहीं हो सकते।');
+ if(type==='deposits'&&(+candidate.qty)+sum(db.deposits.filter(x=>x.lot===candidate.lot&&x.id!==id).map(x=>x.qty))>returned(candidate.lot))return alert('सेंटर में जमा पीस, लेडीज़ से मिले कुल पीस से ज्यादा नहीं हो सकते।');
+ Object.assign(rec,candidate);save();closeModal();if(type==='lots')lotDetail(id);else if(type==='ladies')ladyDetail(id);else if(['alloc','returns'].includes(type))lotDetail(rec.lot);else if(type==='ladyTx')ladyDetail(rec.lady);else if(type==='deposits'){centerPage();showDetail('lotCenter',rec.lot)}else if(type==='centerTx')centerPage();
+}
+function deleteRecord(type,id){if(!confirm('क्या आप इस एंट्री को हमेशा के लिए हटाना चाहते हैं?'))return;let rec=db[type]?.find(x=>x.id===id);if(!rec)return;
+ if(type==='lots'){if(db.alloc.some(x=>x.lot===id)||db.returns.some(x=>x.lot===id)||db.deposits.some(x=>x.lot===id)){if(!confirm('इस लॉट से जुड़ी लेडीज़ और सेंटर की एंट्री भी हटेंगी। क्या जारी रखें?'))return;db.alloc=db.alloc.filter(x=>x.lot!==id);db.returns=db.returns.filter(x=>x.lot!==id);db.deposits=db.deposits.filter(x=>x.lot!==id)} }
+ if(type==='ladies'){if(db.alloc.some(x=>x.lady===id)||db.returns.some(x=>x.lady===id)||db.ladyTx.some(x=>x.lady===id)){if(!confirm('इस लेडी की पीस और पेमेंट एंट्री भी हटेंगी। क्या जारी रखें?'))return;db.alloc=db.alloc.filter(x=>x.lady!==id);db.returns=db.returns.filter(x=>x.lady!==id);db.ladyTx=db.ladyTx.filter(x=>x.lady!==id)} }
+ if(type==='alloc'&&db.returns.some(x=>x.lot===rec.lot&&x.lady===rec.lady)){if(!confirm('इस बाँटने की एंट्री के साथ संबंधित वापसी एंट्री भी हटेंगी।'))return;db.returns=db.returns.filter(x=>!(x.lot===rec.lot&&x.lady===rec.lady))}
+ db[type]=db[type].filter(x=>x.id!==id);save();closeModal();if(type==='lots')lotsPage();else if(type==='ladies')ladiesPage();else if(type==='alloc'||type==='returns')lotDetail(rec.lot);else if(type==='ladyTx')ladyDetail(rec.lady);else if(type==='deposits'){centerPage();showDetail('lotCenter',rec.lot)}else centerPage();
+}
+function backupPage(){document.getElementById('app').innerHTML=`<h2>बैकअप</h2><div class="card"><p>अपने मोबाइल का हिसाब सुरक्षित रखने के लिए समय-समय पर बैकअप डाउनलोड करें।</p><button class="btn" onclick="exportData()">बैकअप डाउनलोड करें</button><label style="margin-top:15px">पुराना बैकअप वापस डालें</label><input type="file" accept="application/json" onchange="importData(event)"><p class="small">ध्यान दें: बैकअप डालने पर इस ऐप का मौजूदा डेटा बदल जाएगा।</p></div>`}
+function exportData(){let blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mera-kaam-hisaab-backup.json';a.click();URL.revokeObjectURL(a.href)}
+function importData(e){let file=e.target.files[0];if(!file)return;let r=new FileReader();r.onload=()=>{try{db=JSON.parse(r.result);save();alert('बैकअप सफलतापूर्वक वापस आ गया।');page('home')}catch{alert('यह बैकअप फाइल सही नहीं है।')}};r.readAsText(file)}
+function openModal(s){document.getElementById('modalBody').innerHTML=s;document.getElementById('modal').classList.remove('hidden')}
+function closeModal(){document.getElementById('modal').classList.add('hidden')}
+page('home');
+</script></body></html>
